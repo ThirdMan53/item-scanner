@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+:root {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --font-geist-sans: "Geist", sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+  overscroll-behavior: none;
+}
+
+/* Safe area insets for iPhone notch / home bar */
+.safe-top    { padding-top:    max(env(safe-area-inset-top),    1rem);  }
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 1.5rem); }
+
+
+/* ── Viewfinder scan sweep ────────────────────────────────────────────────────
+   Uses top% so the line genuinely travels the full height of its container.
+   The element must be position:absolute inside a position:relative parent
+   with overflow:hidden.                                                      */
+@keyframes scan-sweep {
+  0%   { top: 0%;   opacity: 1;   }
+  88%  { opacity: 0.9; }
+  100% { top: 100%; opacity: 0;   }
+}
+.scan-sweep {
+  animation: scan-sweep 2s linear infinite;
+}
+/* Second line runs half a cycle behind for a continuous feel */
+.scan-sweep-2 {
+  animation: scan-sweep 2s linear 1s infinite;
+}
+
+@keyframes corner-pulse {
+  0%, 100% { opacity: 1;    }
+  50%       { opacity: 0.25; }
+}
+.corner-pulse { animation: corner-pulse 2s ease-in-out infinite; }
+
+
+/* ── Camera button pulse rings ───────────────────────────────────────────────
+   Rings start at the button's own bounds and scale outward, then fade.      */
+@keyframes camera-ring {
+  0%   { transform: scale(1);    opacity: 0.5; }
+  100% { transform: scale(1.55); opacity: 0;   }
+}
+.camera-ring   { animation: camera-ring 2.6s ease-out infinite; }
+.camera-ring-2 { animation: camera-ring 2.6s ease-out 1.3s infinite; }
+
+
+/* ── Loading status message ──────────────────────────────────────────────────
+   Changing the React key on this element re-mounts it, replaying the anim.  */
+@keyframes status-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.status-in { animation: status-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+
+/* ── Card reveal ─────────────────────────────────────────────────────────────
+   `both` fill-mode: the from-state applies before the delay starts (so the
+   card stays invisible during the delay) and the to-state persists after.   */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.card-in, .fade-in-up {
+  animation: card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+
+/* ── Value card glow ─────────────────────────────────────────────────────────
+   Applied to the estimated value card to make it stand out.                 */
+.value-glow {
+  background: rgba(16, 185, 129, 0.05) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.1),
+    0 4px 32px rgba(16, 185, 129, 0.09);
+}
