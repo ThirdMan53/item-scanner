@@ -3,13 +3,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { uploadImage, deleteBlob } from "@/lib/imageStore";
 
 const SYSTEM_PROMPT =
+  "Return ONLY a JSON object. No explanation, no markdown, no code fences, no text before or after the JSON. " +
   "You are an expert appraiser and researcher. When shown an image of an item, provide: " +
   "1) A detailed identification and description of the item, " +
   "2) Estimated market value range with reasoning, " +
   "3) Best places to buy or sell this specific item online and in person, " +
   "4) Interesting historical or background information about this type of item. " +
-  "Format your response as valid JSON only, with no markdown, using these exact keys: " +
-  "description, valueRange, whereToBuySell, backgroundInfo";
+  "Respond with a single raw JSON object using exactly these keys: " +
+  "description, valueRange, whereToBuySell, backgroundInfo. " +
+  "Example format: {\"description\":\"...\",\"valueRange\":\"...\",\"whereToBuySell\":\"...\",\"backgroundInfo\":\"...\"}";
 
 const VALID_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageMediaType = (typeof VALID_MEDIA_TYPES)[number];
@@ -20,6 +22,43 @@ export interface WebResult {
   link: string;
   source: string;
   thumbnail: string | null;
+}
+
+// ── JSON extraction ───────────────────────────────────────────────────────────
+// Tries three strategies in order, most-to-least strict, so we gracefully
+// handle whatever wrapping Claude decides to add despite the system prompt.
+
+function extractJson(raw: string): Record<string, string> | null {
+  const attempts: string[] = [];
+
+  // 1. Strip common markdown code fences (```json ... ``` or ``` ... ```)
+  const fenceStripped = raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+  attempts.push(fenceStripped);
+
+  // 2. Grab everything from the first { to the last }
+  const firstBrace = raw.indexOf("{");
+  const lastBrace  = raw.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    attempts.push(raw.slice(firstBrace, lastBrace + 1));
+  }
+
+  // 3. Regex: pull out the outermost {...} block (handles text before/after)
+  const regexMatch = raw.match(/\{[\s\S]*\}/);
+  if (regexMatch) attempts.push(regexMatch[0]);
+
+  for (const candidate of attempts) {
+    try {
+      const obj = JSON.parse(candidate);
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) return obj;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
 }
 
 // ── Claude ────────────────────────────────────────────────────────────────────
@@ -52,12 +91,13 @@ async function fetchClaudeAnalysis(
     .map((b) => (b as { type: "text"; text: string }).text)
     .join("");
 
-  const cleaned = rawText
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .trim();
+  console.log("[Claude raw response]", rawText);
 
-  return JSON.parse(cleaned);
+  const parsed = extractJson(rawText);
+  if (!parsed) {
+    throw new Error(`Could not extract JSON from Claude response: ${rawText}`);
+  }
+  return parsed;
 }
 
 // ── SerpApi Google Lens ───────────────────────────────────────────────────────
@@ -170,7 +210,7 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Scan error:", msg);
 
-    if (msg.startsWith("JSON")) {
+    if (msg.startsWith("Could not extract JSON")) {
       return NextResponse.json(
         { error: "Claude returned an unexpected response format.", raw: msg },
         { status: 502 }
